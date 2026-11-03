@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test de la mise en route</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 16px; font-size: 19px; }
+.ok { color: #0a7d2c; } .ko { color: #c0392b; }
+</style>
+</head>
+<body>
+<h1>Bonjour XR !</h1>
+<p>Si vous lisez ce texte sur votre téléphone, la publication fonctionne.</p>
+<ul id="liste"></ul>
+<script>
+function ligne(nom, ok, aide) {
+const li = document.createElement('li');
+li.className = ok ? 'ok' : 'ko';
+li.textContent = nom + ' : ' + (ok ? 'OUI' : 'NON') + (ok || !aide ? '' : ' (' + aide + ')');
+document.getElementById('liste').appendChild(li);
+}
+ligne('Connexion sécurisée (HTTPS)', window.isSecureContext, 'obligatoire pour la caméra et les capteurs');
+ligne('Caméra accessible', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), 'HTTPS
+requis');
+ligne('Capteurs de mouvement', 'DeviceOrientationEvent' in window, 'navigateur trop ancien');
+ligne('Vibration', !!navigator.vibrate, 'normal sur iPhone : pas de vibration web');
+ligne('Reconnaissance vocale', !!(window.SpeechRecognition || window.webkitSpeechRecognition), 'Chrome
+(Android) conseillé');
+ligne('WebGL (3D)', !!document.createElement('canvas').getContext('webgl'), 'mettez à jour le navigateur');
+const p = document.createElement('p');
+p.textContent = navigator.userAgent;
+p.style.fontSize = '13px';
+document.body.appendChild(p);
+</script>
+</body>
+</html>
