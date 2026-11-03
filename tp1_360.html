@@ -1,0 +1,50 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>TP1 - Panorama 360 (VR sans casque)</title>
+
+    <!-- Importation de A-Frame -->
+    <script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Scène de réalité virtuelle -->
+    <a-scene vr-mode-ui="enabled: false" stats>
+
+        <!-- Chargement des ressources -->
+        <a-assets>
+            <img
+                id="panorama"
+                crossorigin="anonymous"
+                src="https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/2294472375_24a3b8ef46_o.jpg">
+        </a-assets>
+
+        <!-- Panorama à 360 degrés -->
+        <a-sky src="#panorama"></a-sky>
+
+        <!-- Objet virtuel placé à 2 mètres devant la caméra -->
+        <a-box
+            position="0 1.2 -2"
+            color="#e74c3c"
+            width="0.5"
+            height="0.5"
+            depth="0.5">
+        </a-box>
+
+        <!-- Caméra avec contrôle de rotation -->
+        <a-entity
+            camera
+            look-controls
+            position="0 1.6 0">
+        </a-entity>
+
+    </a-scene>
+
+</body>
+</html>
