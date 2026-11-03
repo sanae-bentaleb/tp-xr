@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP1 - Capteurs du smartphone</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 16px; font-size: 18px; }
+pre { background: #eef; padding: 12px; border-radius: 8px; font-size: 17px; }
+button { font-size: 20px; padding: 12px 18px; margin: 6px 6px 6px 0; }
+</style>
+</head>
+<body>
+<h1>Capteurs du smartphone</h1>
+<button id="go">1. Activer les capteurs</button>
+<pre id="out">En attente... (appuyez sur le bouton)</pre>
+<h2>Test de dérive (10 s)</h2>
+<p>Posez le téléphone immobile sur la table, puis appuyez.</p>
+<button id="derive">2. Lancer le test de dérive</button>
+<pre id="res">Résultat : -</pre>
+<script>
+// ---------- 1. Lecture de l'orientation et de l'accélération ----------
+const out = document.getElementById('out');
+let o = { a: null, b: null, g: null }; // orientation (degrés)
+let acc = { x: null, y: null, z: null }; // accélération avec gravité (m/s²)
+let lin = { x: 0, y: 0, z: 0 }; // accélération linéaire (sans gravité)
+async function demanderPermissions() {
+// iPhone (iOS 13+) : la permission doit être demandée après un clic
+if (typeof DeviceOrientationEvent !== 'undefined' &&
+typeof DeviceOrientationEvent.requestPermission === 'function') {
+const r = await DeviceOrientationEvent.requestPermission();
+if (r !== 'granted') throw new Error('Permission refusée');
+}
+if (typeof DeviceMotionEvent !== 'undefined' &&
+typeof DeviceMotionEvent.requestPermission === 'function') {
+const r = await DeviceMotionEvent.requestPermission();
+if (r !== 'granted') throw new Error('Permission refusée');
+}
+}
+function f(v) { return v == null ? ' n/a ' : v.toFixed(1).padStart(7); }
+function afficher() {
+const norme = Math.hypot(acc.x || 0, acc.y || 0, acc.z || 0);
+out.textContent =
+'ORIENTATION (degrés)\n' +
+' alpha (cap) : ' + f(o.a) + '\n' +
+' beta (avant/arrière) : ' + f(o.b) + '\n' +
+' gamma (gauche/droite) : ' + f(o.g) + '\n\n' +
+'ACCÉLÉRATION (m/s²)\n' +
+' x : ' + f(acc.x) + '\n' +
+' y : ' + f(acc.y) + '\n' +
+' z : ' + f(acc.z) + '\n' +
+' norme : ' + norme.toFixed(2);
+}
+document.getElementById('go').onclick = async () => {
+try { await demanderPermissions(); }
+catch (e) { out.textContent = 'Erreur : ' + e.message; return; }
+window.addEventListener('deviceorientation', e => { o = { a: e.alpha, b: e.beta, g: e.gamma }; });
+window.addEventListener('devicemotion', e => {
+if (e.accelerationIncludingGravity) {
+acc = { x: e.accelerationIncludingGravity.x, y: e.accelerationIncludingGravity.y, z:
+e.accelerationIncludingGravity.z };
+}
+if (e.acceleration && e.acceleration.x != null) {
+lin = { x: e.acceleration.x, y: e.acceleration.y, z: e.acceleration.z };
+}
+traiterDerive();
+});
+setInterval(afficher, 100);
+};
+// ---------- 2. Test de dérive : on intègre deux fois l'accélération ----------
+let derive = null; // {t0, tPrev, v:[0,0,0], p:[0,0,0]}
+const res = document.getElementById('res');
+function traiterDerive() {
+if (!derive) return;
+const t = performance.now() / 1000;
+const dt = t - derive.tPrev;
+derive.tPrev = t;
+const a = [lin.x, lin.y, lin.z];
+for (let i = 0; i < 3; i++) {
+derive.v[i] += a[i] * dt; // vitesse = intégrale de l'accélération
+derive.p[i] += derive.v[i] * dt; // position = intégrale de la vitesse
+}
+const reste = 10 - (t - derive.t0);
+if (reste <= 0) {
+const d = Math.hypot(...derive.p) * 100; // en centimètres
+res.textContent = 'Après 10 s IMMOBILE, le téléphone "croit" avoir bougé de ' + d.toFixed(0) + ' cm.';
+derive = null;
+} else {
+res.textContent = 'Mesure en cours... ' + reste.toFixed(0) + ' s';
+}
+}
+document.getElementById('derive').onclick = () => {
+const t = performance.now() / 1000;
+derive = { t0: t, tPrev: t, v: [0, 0, 0], p: [0, 0, 0] };
+res.textContent = 'Mesure en cours... 10 s (ne touchez plus le téléphone)';
+};
+</script>
+</body>
+</html>
