@@ -1,37 +1,141 @@
+
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test de la mise en route</title>
-<style>
-body { font-family: system-ui, sans-serif; margin: 16px; font-size: 19px; }
-.ok { color: #0a7d2c; } .ko { color: #c0392b; }
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Test de la mise en route XR</title>
+
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 16px;
+            font-size: 19px;
+            line-height: 1.5;
+        }
+
+        h1 {
+            color: #222;
+        }
+
+        .ok {
+            color: #0a7d2c;
+        }
+
+        .ko {
+            color: #c0392b;
+        }
+
+        li {
+            margin-bottom: 12px;
+        }
+
+        .info {
+            font-size: 13px;
+            color: #666;
+            overflow-wrap: anywhere;
+        }
+    </style>
 </head>
+
 <body>
-<h1>Bonjour XR !</h1>
-<p>Si vous lisez ce texte sur votre téléphone, la publication fonctionne.</p>
-<ul id="liste"></ul>
-<script>
-function ligne(nom, ok, aide) {
-const li = document.createElement('li');
-li.className = ok ? 'ok' : 'ko';
-li.textContent = nom + ' : ' + (ok ? 'OUI' : 'NON') + (ok || !aide ? '' : ' (' + aide + ')');
-document.getElementById('liste').appendChild(li);
-}
-ligne('Connexion sécurisée (HTTPS)', window.isSecureContext, 'obligatoire pour la caméra et les capteurs');
-ligne('Caméra accessible', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), 'HTTPS
-requis');
-ligne('Capteurs de mouvement', 'DeviceOrientationEvent' in window, 'navigateur trop ancien');
-ligne('Vibration', !!navigator.vibrate, 'normal sur iPhone : pas de vibration web');
-ligne('Reconnaissance vocale', !!(window.SpeechRecognition || window.webkitSpeechRecognition), 'Chrome
-(Android) conseillé');
-ligne('WebGL (3D)', !!document.createElement('canvas').getContext('webgl'), 'mettez à jour le navigateur');
-const p = document.createElement('p');
-p.textContent = navigator.userAgent;
-p.style.fontSize = '13px';
-document.body.appendChild(p);
-</script>
+
+    <h1>Bonjour XR !</h1>
+
+    <p>
+        Si vous lisez ce texte sur votre téléphone,
+        la publication fonctionne.
+    </p>
+
+    <h2>Résultats des tests</h2>
+
+    <ul id="liste"></ul>
+
+    <script>
+
+        // Fonction pour afficher chaque résultat
+        function ligne(nom, ok, aide) {
+
+            const li = document.createElement('li');
+
+            li.className = ok ? 'ok' : 'ko';
+
+            li.textContent =
+                nom + ' : ' +
+                (ok ? 'OUI' : 'NON') +
+                (ok || !aide ? '' : ' (' + aide + ')');
+
+            document.getElementById('liste').appendChild(li);
+        }
+
+        // 1. Vérification HTTPS
+        ligne(
+            'Connexion sécurisée (HTTPS)',
+            window.isSecureContext,
+            'Obligatoire pour la caméra et les capteurs'
+        );
+
+        // 2. Vérification de la caméra
+        ligne(
+            'Caméra accessible',
+            !!(navigator.mediaDevices &&
+               navigator.mediaDevices.getUserMedia),
+            'HTTPS requis'
+        );
+
+        // 3. Capteurs de mouvement
+        ligne(
+            'Capteurs de mouvement',
+            'DeviceOrientationEvent' in window,
+            'Navigateur trop ancien ou fonctionnalité non disponible'
+        );
+
+        // 4. Vibration
+        ligne(
+            'Vibration',
+            !!navigator.vibrate,
+            'Normal sur iPhone : pas de vibration web'
+        );
+
+        // 5. Reconnaissance vocale
+        ligne(
+            'Reconnaissance vocale',
+            !!(window.SpeechRecognition ||
+               window.webkitSpeechRecognition),
+            'Chrome Android conseillé'
+        );
+
+        // 6. WebGL pour la 3D
+        let webglDisponible = false;
+
+        try {
+            const canvas = document.createElement('canvas');
+            webglDisponible =
+                !!(canvas.getContext('webgl') ||
+                   canvas.getContext('experimental-webgl'));
+        } catch (e) {
+            webglDisponible = false;
+        }
+
+        ligne(
+            'WebGL (3D)',
+            webglDisponible,
+            'Mettez à jour le navigateur'
+        );
+
+        // Informations sur le navigateur
+        const p = document.createElement('p');
+
+        p.textContent = 'Navigateur : ' + navigator.userAgent;
+
+        p.className = 'info';
+
+        document.body.appendChild(p);
+
+    </script>
+
 </body>
 </html>
+
