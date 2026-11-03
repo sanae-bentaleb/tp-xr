@@ -1,0 +1,195 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>TP1 - Budget par image</title>
+
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 16px;
+            font-size: 18px;
+        }
+
+        .big {
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        .ok {
+            color: #0a7d2c;
+        }
+
+        .ko {
+            color: #c0392b;
+        }
+
+        input[type=range] {
+            width: 100%;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        td, th {
+            border: 1px solid #999;
+            padding: 4px 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Budget de temps par image</h1>
+
+    <p class="big" id="fps">-- images/s</p>
+
+    <p>
+        Temps moyen par image :
+        <b id="moy">--</b> ms
+        <br>
+
+        Pire image (sur 60) :
+        <b id="pire">--</b> ms
+        <br>
+
+        Cadence nominale estimée de l'écran :
+        <b id="nominal">--</b> Hz
+        <br>
+
+        Budget nominal par image :
+        <b id="budget">--</b> ms
+    </p>
+
+    <p id="verdict"></p>
+
+    <h3>
+        Charge artificielle :
+        <span id="valCharge">0</span> ms par image
+    </h3>
+
+    <input
+        type="range"
+        id="charge"
+        min="0"
+        max="40"
+        step="1"
+        value="0"
+    >
+
+    <script>
+
+        const frames = [];
+
+        let fpsMax = 0;
+        let derniere = performance.now();
+        let charge = 0;
+
+        // Contrôle de la charge artificielle
+        document.getElementById('charge').oninput = e => {
+
+            charge = +e.target.value;
+
+            document.getElementById('valCharge').textContent = charge;
+        };
+
+        // Boucle principale de mesure
+        function boucle(t) {
+
+            const dt = t - derniere;
+
+            derniere = t;
+
+            // On ignore la première seconde (démarrage)
+            if (dt > 0 && t > 1500) {
+                frames.push(dt);
+            }
+
+            // On conserve uniquement les 60 dernières images
+            if (frames.length > 60) {
+                frames.shift();
+            }
+
+            // Simulation d'un calcul lourd
+            const debut = performance.now();
+
+            while (performance.now() - debut < charge) {
+                // Attente active
+            }
+
+            requestAnimationFrame(boucle);
+        }
+
+        requestAnimationFrame(boucle);
+
+        // Mise à jour des statistiques chaque seconde
+        setInterval(() => {
+
+            if (frames.length < 10) return;
+
+            // Calcul du temps moyen
+            const moy = frames.reduce((a, b) => a + b, 0) / frames.length;
+
+            // Calcul du pire temps
+            const pire = Math.max(...frames);
+
+            // Calcul du FPS
+            const fps = 1000 / moy;
+
+            // Recherche du meilleur FPS observé
+            fpsMax = Math.max(fpsMax, fps);
+
+            // Fréquences standards
+            const standards = [30, 60, 72, 90, 120];
+
+            // Cadence nominale estimée
+            const nominal = standards.reduce((p, c) =>
+                Math.abs(c - fpsMax) < Math.abs(p - fpsMax) ? c : p
+            );
+
+            // Budget de temps par image
+            const budget = 1000 / nominal;
+
+            // Affichage des résultats
+            document.getElementById('fps').textContent =
+                fps.toFixed(0) + ' images/s';
+
+            document.getElementById('moy').textContent =
+                moy.toFixed(1);
+
+            document.getElementById('pire').textContent =
+                pire.toFixed(1);
+
+            document.getElementById('nominal').textContent =
+                nominal;
+
+            document.getElementById('budget').textContent =
+                budget.toFixed(1);
+
+            // Vérification du budget
+            const v = document.getElementById('verdict');
+
+            if (moy > budget * 1.15 || pire > budget * 1.5) {
+
+                v.textContent = 'Budget dépassé : saccades visibles.';
+
+                v.className = 'ko';
+
+            } else {
+
+                v.textContent = 'Budget respecté : affichage fluide.';
+
+                v.className = 'ok';
+            }
+
+        }, 1000);
+
+    </script>
+
+</body>
+</html>
