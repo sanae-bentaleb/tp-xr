@@ -35,8 +35,42 @@
     <a-plane rotation="-90 0 0" width="10" height="10" color="#6d6d6d"></a-plane>
 
     <!-- TEST : ces deux lignes seront remplacées à l'étape B -->
-    <a-sky color="#9ec9ee"></a-sky>
-    <a-box class="clickable" position="0 1.2 -2" color="#e53935"></a-box>
+ <!-- ============ BLOC 1 : ENVIRONNEMENT (organisé par fonction) ============ -->
+<a-entity id="Environnement">
+  <a-sky color="#9ec9ee"></a-sky>
+  <a-entity light="type: ambient; intensity: 0.7"></a-entity>
+  <a-entity light="type: directional; intensity: 0.8" position="1 4 2"></a-entity>
+
+  <!-- Sol (6 m x 6 m). Touchez-le pour vous téléporter. -->
+  <a-plane id="Sol" class="interactif" teleport-sol rotation="-90 0 0"
+           width="6" height="6" material="color: #c9c9c9; roughness: 0.9"></a-plane>
+
+  <!-- Murs (hauteur 3 m) -->
+  <a-plane position="0 1.5 -3" width="6" height="3" material="color: #e8eef5"></a-plane>
+  <a-plane position="-3 1.5 0" rotation="0 90 0" width="6" height="3" material="color: #e8eef5"></a-plane>
+  <a-plane position="3 1.5 0" rotation="0 -90 0" width="6" height="3" material="color: #e8eef5"></a-plane>
+  <a-plane position="0 1.5 3" rotation="0 180 0" width="6" height="3" material="color: #e8eef5"></a-plane>
+
+  <!-- Table A : instruments (plateau à 0,75 m du sol) -->
+  <a-entity id="Table_A" position="-0.6 0 -1">
+    <a-box position="0 0.725 0" width="1" height="0.05" depth="0.6" material="color: #8d6e63; roughness: 0.8"></a-box>
+    <a-box position="-0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
+    <a-box position="0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
+    <a-box position="-0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
+    <a-box position="0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
+  </a-entity>
+
+  <!-- Table B : plateau avec 3 zones de dépôt -->
+  <a-entity id="Table_B" position="0.6 0 -1">
+    <a-box position="0 0.725 0" width="1" height="0.05" depth="0.6" material="color: #eceff1; roughness: 0.5"></a-box>
+    <a-box position="-0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+    <a-box position="0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+    <a-box position="-0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+    <a-box position="0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+  </a-entity>
+
+  <!-- Panneau de mission ancré dans le monde (pas collé à la tête) -->
+  <a-plane
     <!-- FIN DU TEST -->
   </a-scene>
 
