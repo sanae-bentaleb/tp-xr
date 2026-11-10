@@ -24,6 +24,8 @@
     <!-- ============ BLOC 1 : ENVIRONNEMENT (organisé par fonction) ============ -->
     <a-entity id="Environnement">
       <a-sky color="#9ec9ee"></a-sky>
+      <a-entity light="type: ambient; intensity: 0.7"></a-entity>
+      <a-entity light="type: directional; intensity: 0.8" position="1 4 2"></a-entity>
 
       <!-- Sol (6 m x 6 m). Touchez-le pour vous téléporter. -->
       <a-plane id="Sol" class="interactif" teleport-sol rotation="-90 0 0"
@@ -36,7 +38,7 @@
       <a-plane position="0 1.5 3" rotation="0 180 0" width="6" height="3" material="color: #e8eef5"></a-plane>
 
       <!-- Table A : instruments (plateau à 0,75 m du sol) -->
-      <a-entity id="Table_A" position="-1.6 0 -1"scale="3 3 3">
+      <a-entity id="Table_A" position="-0.6 0 -1">
         <a-box position="0 0.725 0" width="1" height="0.05" depth="0.6" material="color: #8d6e63; roughness: 0.8"></a-box>
         <a-box position="-0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
         <a-box position="0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
@@ -44,35 +46,53 @@
         <a-box position="0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#5d4037"></a-box>
       </a-entity>
 
-<!-- ============ BLOC 2 : ZONES DE DÉPÔT ============ -->
-<a-entity id="Zones">
-  <a-cylinder id="zone_bistouri" class="interactif" zone-depot
-              position="0.3 0.755 -1" radius="0.1" height="0.01" color="#ef9a9a"></a-cylinder>
-  <a-cylinder id="zone_pince" class="interactif" zone-depot
-              position="0.6 0.755 -1" radius="0.1" height="0.01" color="#90caf9"></a-cylinder>
-  <a-cylinder id="zone_ecarteur" class="interactif" zone-depot
-              position="0.9 0.755 -1" radius="0.1" height="0.01" color="#a5d6a7"></a-cylinder>
+      <!-- Table B : plateau avec 3 zones de dépôt -->
+      <a-entity id="Table_B" position="0.6 0 -1">
+        <a-box position="0 0.725 0" width="1" height="0.05" depth="0.6" material="color: #eceff1; roughness: 0.5"></a-box>
+        <a-box position="-0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+        <a-box position="0.45 0.35 -0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+        <a-box position="-0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+        <a-box position="0.45 0.35 0.25" width="0.05" height="0.7" depth="0.05" color="#90a4ae"></a-box>
+      </a-entity>
 
-  <a-text position="0.3 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Bistouri"></a-text>
-  <a-text position="0.6 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Pince"></a-text>
-  <a-text position="0.9 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Écarteur"></a-text>
-</a-entity>
+      <!-- Panneau de mission ancré dans le monde (pas collé à la tête) -->
+      <a-plane position="0 2.0 -2.95" width="2.4" height="1.1" material="color: #1b2a41; shader: flat"></a-plane>
+      <a-text id="Panneau" position="0 2.1 -2.93" width="2.2" align="center" color="#ffffff"
+              value="Salle de formation&#10;Placez chaque instrument&#10;dans sa zone."></a-text>
+      <a-text position="0 1.7 -2.93" width="2.2" wrap-count="50" align="center" color="#ffd54f"
+              value="Prototype pédagogique - pas un dispositif médical"></a-text>
+    </a-entity>
+    <!-- FIN du groupe Environnement -->
 
-<!-- ============ BLOC 3 : OBJETS INTERACTIFS (instruments) ============ -->
-<!-- Tailles >= 8 cm : visables facilement à ~2 m (voir TP3) -->
-<a-entity id="Instruments">
-  <a-box id="bistouri" class="interactif" instrument="nom: Bistouri; zone: zone_bistouri"
-         position="-0.9 0.79 -1" width="0.22" height="0.08" depth="0.08"
-         material="color: #e53935; metalness: 0.3; roughness: 0.4"></a-box>
+    <!-- ============ BLOC 2 : ZONES DE DÉPÔT ============ -->
+    <a-entity id="Zones">
+      <a-cylinder id="zone_bistouri" class="interactif" zone-depot
+                  position="0.3 0.755 -1" radius="0.1" height="0.01" color="#ef9a9a"></a-cylinder>
+      <a-cylinder id="zone_pince" class="interactif" zone-depot
+                  position="0.6 0.755 -1" radius="0.1" height="0.01" color="#90caf9"></a-cylinder>
+      <a-cylinder id="zone_ecarteur" class="interactif" zone-depot
+                  position="0.9 0.755 -1" radius="0.1" height="0.01" color="#a5d6a7"></a-cylinder>
 
-  <a-cylinder id="pince" class="interactif" instrument="nom: Pince; zone: zone_pince"
-              position="-0.6 0.80 -1" rotation="0 0 90" radius="0.05" height="0.2"
-              material="color: #1e88e5; metalness: 0.3; roughness: 0.4"></a-cylinder>
+      <a-text position="0.3 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Bistouri"></a-text>
+      <a-text position="0.6 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Pince"></a-text>
+      <a-text position="0.9 0.9 -1" width="0.7" align="center" color="#1b2a41" value="Écarteur"></a-text>
+    </a-entity>
 
-  <a-cone id="ecarteur" class="interactif" instrument="nom: Écarteur; zone: zone_ecarteur"
-          position="-0.3 0.825 -1" radius-bottom="0.07" radius-top="0" height="0.15"
-          material="color: #43a047; metalness: 0.3; roughness: 0.4"></a-cone>
-</a-entity>
+    <!-- ============ BLOC 3 : OBJETS INTERACTIFS (instruments) ============ -->
+    <!-- Tailles >= 8 cm : visables facilement à ~2 m (voir TP3) -->
+    <a-entity id="Instruments">
+      <a-box id="bistouri" class="interactif" instrument="nom: Bistouri; zone: zone_bistouri"
+             position="-0.9 0.79 -1" width="0.22" height="0.08" depth="0.08"
+             material="color: #e53935; metalness: 0.3; roughness: 0.4"></a-box>
+
+      <a-cylinder id="pince" class="interactif" instrument="nom: Pince; zone: zone_pince"
+                  position="-0.6 0.80 -1" rotation="0 0 90" radius="0.05" height="0.2"
+                  material="color: #1e88e5; metalness: 0.3; roughness: 0.4"></a-cylinder>
+
+      <a-cone id="ecarteur" class="interactif" instrument="nom: Écarteur; zone: zone_ecarteur"
+              position="-0.3 0.825 -1" radius-bottom="0.07" radius-top="0" height="0.15"
+              material="color: #43a047; metalness: 0.3; roughness: 0.4"></a-cone>
+    </a-entity>
 
     <!-- ============ BLOC 4 : XR ORIGIN (rig) + caméra + curseur ============ -->
     <!-- On déplace le RIG, jamais la caméra seule. wasd : test sur ordinateur. -->
