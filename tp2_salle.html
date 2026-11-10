@@ -107,22 +107,156 @@
 
   </a-scene>
 
-  <script>
-    // Téléportation : un tap sur le sol déplace le rig (jamais la caméra seule)
-    AFRAME.registerComponent('teleport-sol', {
-      init() {
-        const rig = document.getElementById('rig');
-        const hud = document.getElementById('hud');
-        this.el.addEventListener('click', e => {
-          const p = e.detail.intersection.point;
-          // clamp : on reste à l'intérieur des murs (salle de 6 m x 6 m)
-          rig.object3D.position.set(
-            THREE.MathUtils.clamp(p.x, -2.6, 2.6), 0,
-            THREE.MathUtils.clamp(p.z, -2.6, 2.6));
-          hud.textContent = 'Téléporté !';
-        });
+<script>
+const THREE = AFRAME.THREE;
+
+/* ---------- Petits outils : son et vibration ---------- */
+let ctxAudio = null;
+function bip(freq = 660, duree = 0.12) {
+  try {
+    ctxAudio = ctxAudio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctxAudio.createOscillator(), g = ctxAudio.createGain();
+    o.frequency.value = freq; g.gain.value = 0.15;
+    o.connect(g); g.connect(ctxAudio.destination);
+    o.start(); o.stop(ctxAudio.currentTime + duree);
+  } catch (e) { /* pas de son : on continue */ }
+}
+function vibrer(motif) { if (navigator.vibrate) navigator.vibrate(motif); } // Android seulement
+
+/* ---------- État global du jeu (la "règle métier") ---------- */
+const jeu = { main: null, score: 0, erreurs: 0, t0: null, fini: false };
+const hud = document.getElementById('hud');
+
+function majPanneau(msg) {
+  document.getElementById('Panneau').setAttribute('text', 'value',
+    'Score : ' + jeu.score + ' / 3   |   Erreurs : ' + jeu.erreurs + '\n' + msg);
+  hud.textContent = (jeu.main
+      ? 'En main : ' + jeu.main.components.instrument.data.nom + ' - touchez sa zone'
+      : 'Touchez un instrument pour le saisir')
+    + ' | Score ' + jeu.score + '/3 Erreurs ' + jeu.erreurs;
+}
+
+/* ---------- Composant : téléportation en touchant le sol ---------- */
+AFRAME.registerComponent('teleport-sol', {
+  init() {
+    this.el.addEventListener('click', e => {
+      if (!e.detail.intersection) return;
+      const p = e.detail.intersection.point;
+      const rig = document.getElementById('rig');
+      const x = Math.max(-2.4, Math.min(2.4, p.x));
+      const z = Math.max(-2.4, Math.min(2.4, p.z));
+      rig.object3D.position.set(x, 0, z);   // on déplace le RIG
+      bip(440, 0.08);
+    });
+  }
+});
+
+/* ---------- Composant : instrument (machine à états) ---------- */
+/* états : libre -> survole -> saisi -> (libre | depose) */
+AFRAME.registerComponent('instrument', {
+  schema: { nom: { type: 'string' }, zone: { type: 'string' } },
+  init() {
+    this.etat = 'libre';
+    this.posInit = null;   // mémorisées au premier saisir()
+    this.rotInit = null;
+    this.el.addEventListener('mouseenter', () => { if (this.etat === 'libre') this.setEtat('survole'); });
+    this.el.addEventListener('mouseleave', () => { if (this.etat === 'survole') this.setEtat('libre'); });
+    this.el.addEventListener('click', () => {
+      if (this.etat === 'depose') return;
+      if (this.etat === 'saisi') this.relacher();   // retoucher = annuler
+      else if (!jeu.main) this.saisir();            // une seule main
+    });
+  },
+  setEtat(e) {
+    this.etat = e;
+    // Retour visuel : surbrillance quand l'objet est visé
+    this.el.setAttribute('material', 'emissive', e === 'survole' ? '#ffee58' : '#000000');
+    this.el.setAttribute('material', 'emissiveIntensity', e === 'survole' ? 0.6 : 0);
+  },
+  saisir() {
+    if (!jeu.t0) jeu.t0 = performance.now();
+    if (!this.posInit) {
+      this.posInit = this.el.object3D.position.clone();
+      this.rotInit = this.el.object3D.rotation.clone();
+    }
+    const tete = document.getElementById('tete');
+    tete.object3D.attach(this.el.object3D);          // l'objet devient enfant de la tête
+    this.el.object3D.position.set(0.22, -0.22, -0.7); // en bas à droite : ne masque pas le curseur
+    this.el.object3D.rotation.set(0, 0, 0);
+    this.el.classList.remove('interactif');          // le rayon ignore l'objet tenu
+    jeu.main = this.el;
+    this.setEtat('saisi');
+    bip(520); vibrer(30);
+    majPanneau('Vous tenez : ' + this.data.nom);
+  },
+  relacher() {   // retour à la place initiale
+    document.getElementById('scene').object3D.attach(this.el.object3D);
+    this.el.object3D.position.copy(this.posInit);
+    this.el.object3D.rotation.copy(this.rotInit);
+    this.el.classList.add('interactif');
+    jeu.main = null;
+    this.setEtat('libre');
+    bip(330, 0.1);
+    majPanneau('Instrument reposé.');
+  },
+  deposer(zoneEl) {
+    const p = new THREE.Vector3();
+    zoneEl.object3D.getWorldPosition(p);
+    const obj = this.el.object3D;
+    document.getElementById('scene').object3D.attach(obj);
+    obj.rotation.set(0, 0, 0);
+    obj.position.set(p.x, p.y, p.z);
+    // On pose l'objet exactement sur le disque (dessus du disque = p.y + 0,005)
+    obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj);
+    obj.position.y += (p.y + 0.005) - box.min.y;
+    jeu.main = null;
+    this.setEtat('depose');
+  }
+});
+
+/* ---------- Composant : zone de dépôt (règle métier + confirmation) ---------- */
+AFRAME.registerComponent('zone-depot', {
+  init() {
+    this.el.addEventListener('click', () => {
+      if (!jeu.main || jeu.fini) return;
+      const inst = jeu.main.components.instrument;
+      if (inst.data.zone === this.el.id) {            // bonne zone
+        inst.deposer(this.el);
+        jeu.score++;
+        bip(880, 0.2); vibrer([40, 60, 40]);
+        this.el.setAttribute('material', 'color', '#2e7d32');
+        if (jeu.score === 3) {
+          jeu.fini = true;
+          const s = ((performance.now() - jeu.t0) / 1000).toFixed(0);
+          majPanneau('TERMINÉ en ' + s + ' s');
+          console.log('RESULTAT', JSON.stringify({ secondes: +s, erreurs: jeu.erreurs }));
+        } else majPanneau('Bien joué !');
+      } else {                                        // mauvaise zone : erreur récupérable
+        jeu.erreurs++;
+        bip(180, 0.3); vibrer([100, 50, 100]);
+        const ancienne = this.el.getAttribute('material').color;
+        this.el.setAttribute('material', 'color', '#d32f2f');
+        setTimeout(() => this.el.setAttribute('material', 'color', ancienne), 500);
+        inst.relacher();
+        majPanneau('Mauvaise zone. Réessayez.');
       }
     });
-  </script>
+  }
+});
+
+/* ---------- Outils de mesure (étape Performance) ---------- */
+// ?stats affiche FPS / triangles / draw calls ; ?stress=200 ajoute 200 sphères coûteuses.
+const params = new URLSearchParams(location.search);
+const sceneEl = document.getElementById('scene');
+if (params.has('stats')) sceneEl.setAttribute('stats', '');
+const nbStress = parseInt(params.get('stress') || '0', 10);
+for (let i = 0; i < nbStress; i++) {
+  const s = document.createElement('a-sphere');
+  s.setAttribute('radius', 0.08);
+  s.setAttribute('segments-width', 32);
+  s.setAttribute('segments-height', 32);
+  s.setAttribute('position', {
+    x: (Math.random() - 0.5)
 </body>
 </html>
