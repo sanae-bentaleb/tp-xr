@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>TP2 - Salle XR interactive</title>
+  <!-- Version figée : on note toujours la version utilisée (reproductibilité) -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+  <style>
+    #hud {
+      position: fixed; bottom: 8px; left: 8px; right: 8px; z-index: 10;
+      pointer-events: none;
+      font: 600 16px system-ui, sans-serif;
+      color: #fff;
+      text-shadow: 0 0 4px #000, 0 0 4px #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">Visez avec le point blanc, touchez l'écran pour agir.</div>
+
+  <a-scene id="scene" vr-mode-ui="enabled: false" renderer="antialias: true">
+
+    <!-- Caméra à hauteur des yeux + point de visée (le « point blanc ») -->
+    <a-entity id="rig" position="0 1.6 0">
+      <a-camera look-controls wasd-controls-enabled="false">
+        <a-cursor
+          color="#ffffff"
+          raycaster="objects: .clickable"
+          geometry="radius-inner: 0.008; radius-outer: 0.014"></a-cursor>
+      </a-camera>
+    </a-entity>
+
+    <!-- Sol de la salle -->
+    <a-plane rotation="-90 0 0" width="10" height="10" color="#6d6d6d"></a-plane>
+
+    <!-- TEST : ces deux lignes seront remplacées à l'étape B -->
+    <a-sky color="#9ec9ee"></a-sky>
+    <a-box class="clickable" position="0 1.2 -2" color="#e53935"></a-box>
+    <!-- FIN DU TEST -->
+  </a-scene>
+
+  <script>
+    const hud = document.getElementById('hud');
+    // Test rapide du cursor : le HUD change quand on touche la boîte
+    document.querySelectorAll('.clickable').forEach(el => {
+      el.addEventListener('click', () => { hud.textContent = 'Objet touché !'; });
+    });
+  </script>
+</body>
+</html>
