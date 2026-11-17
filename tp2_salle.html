@@ -226,6 +226,12 @@ for (let i = 0; i < nbStress; i++) {
  sceneEl.appendChild(s);
 }
 sceneEl.addEventListener('loaded', () => majPanneau('Saisissez un instrument.'));
+ /* ---------- Annulation : toucher dans le vide pendant qu'on tient un objet ---------- */
+document.getElementById('curseur').addEventListener('click', e => {
+ if (jeu.main && !e.detail.intersectedEl) {
+ jeu.main.components.instrument.relacher();
+ }
+});
 </script>
 </body>
 </html>
