@@ -218,8 +218,8 @@ const nbStress = parseInt(params.get('stress') || '0', 10);
 for (let i = 0; i < nbStress; i++) {
  const s = document.createElement('a-sphere');
  s.setAttribute('radius', 0.08);
- s.setAttribute('segments-width', 32);
- s.setAttribute('segments-height', 32);
+ s.setAttribute('segments-width', 8);
+ s.setAttribute('segments-height', 8);
  s.setAttribute('position', {
  x: (Math.random() - 0.5) * 5, y: 0.3 + Math.random() * 2.5, z: (Math.random() - 0.5) * 5 });
  s.setAttribute('material', 'color: #9575cd; metalness: 0.5; roughness: 0.3');
