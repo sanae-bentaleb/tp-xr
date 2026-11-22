@@ -195,6 +195,13 @@ AFRAME.registerComponent('zone-depot', {
  jeu.fini = true;
  const s = ((performance.now() - jeu.t0) / 1000).toFixed(0);
  majPanneau('TERMINE en ' + s + ' s');
+  const res = document.createElement('a-text');
+res.setAttribute('value', 'TERMINE !\n' + s + ' s  -  ' + jeu.erreurs + ' erreur(s)');
+res.setAttribute('position', '0 1.2 -2.9');
+res.setAttribute('width', '4');
+res.setAttribute('align', 'center');
+res.setAttribute('color', '#ffd54f');
+sceneEl.appendChild(res);
  console.log('RESULTAT', JSON.stringify({ secondes: +s, erreurs: jeu.erreurs }));
  } else majPanneau('Bien joue !');
  } else { // mauvaise zone : erreur récupérable
