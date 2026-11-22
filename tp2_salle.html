@@ -156,7 +156,8 @@ AFRAME.registerComponent('instrument', {
  this.el.classList.remove('interactif'); // le rayon ignore l'objet tenu
  jeu.main = this.el;
  this.setEtat('saisi');
- bip(520); vibrer(30);
+const sons = { Bistouri: 700, Pince: 520, Ecarteur: 400 };
+bip(sons[this.data.nom] || 520); vibrer(30);
  majPanneau('Vous tenez : ' + this.data.nom);
  },
  relacher() { // retour à la place initiale
