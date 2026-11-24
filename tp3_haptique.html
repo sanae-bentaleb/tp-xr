@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Haptique et audio spatial</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 14px; font-size: 18px; }
+h2 { margin-top: 26px; }
+button { font-size: 19px; padding: 12px 16px; margin: 4px 4px 4px 0; border-radius: 8px; border: 0; background: #1565c0; color: #fff; }
+button.sec { background: #546e7a; }
+input[type=range] { width: 100%; }
+#flash { width: 100%; height: 60px; background: #ddd; border-radius: 8px; margin: 8px 0; }
+pre { background: #eceff1; padding: 10px; border-radius: 8px; font-size: 15px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Haptique et audio spatial</h1>
+<p id="support"></p>
+
+<!-- ============ A. Vibrations ============ -->
+<h2>A. Motifs de vibration</h2>
+<button data-v="30">Tic (30 ms)</button>
+<button data-v="40,60,40">Validation</button>
+<button data-v="200,100,200,100,200">Alerte</button>
+<button data-v="15,30,25,30,40,30,60">Rampe</button>
+<p>Collision : vitesse <b id="vit">1.5</b> m/s
+<input type="range" id="vitesse" min="0.2" max="3" step="0.1" value="1.5">
+<button id="bColl">Heurter</button></p>
+
+<!-- ============ B. Audio spatial ============ -->
+<h2>B. Audio spatial (mettez des écouteurs)</h2>
+<p>Azimut de la source : <b id="azVal">0</b>° (-90 = gauche, 0 = devant, +90 = droite)</p>
+<input type="range" id="az" min="-90" max="90" step="5" value="0">
+<button id="bSon">Jouer le son</button>
+
+<h3>Jeu de localisation</h3>
+<p>Fermez les yeux : un son est joué, devinez sa direction.</p>
+<button id="bJeu">Nouveau son mystère</button>
+<button class="sec" data-rep="-60">Gauche</button>
+<button class="sec" data-rep="0">Devant</button>
+<button class="sec" data-rep="60">Droite</button>
+<pre id="scoreJeu">Score : 0 / 0</pre>
+
+<!-- ============ C. Synchronisation ============ -->
+<h2>C. Synchronisation son / vibration / image</h2>
+<p>Décalage de la vibration : <b id="dec">0</b> ms après le son</p>
+<input type="range" id="decalage" min="0" max="300" step="10" value="0">
+<button id="bSync">Déclencher</button>
+<div id="flash"></div>
+<p>Notez à partir de quel décalage vous percevez "deux événements".</p>
+
+<script>
+const $ = id => document.getElementById(id);
+$('support').textContent = navigator.vibrate
+  ? 'Vibration : disponible sur ce téléphone.'
+  : 'Vibration : NON disponible (iPhone / Safari). On utilise le principe de substitution : un flash visuel remplace la vibration.';
+
+/* ---------- A. Vibrations ---------- */
+function vibrer(motif) {
+  if (navigator.vibrate) {
+    navigator.vibrate(motif);
+  } else {
+    $('flash').style.background = '#ffb300';
+    setTimeout(() => { $('flash').style.background = '#ddd'; }, 150);
+  }
+}
+document.querySelectorAll('[data-v]').forEach(b =>
+  b.onclick = () => vibrer(b.dataset.v.split(',').map(Number)));
+
+$('vitesse').oninput = e => $('vit').textContent = e.target.value;
+$('bColl').onclick = () => {
+  const v = parseFloat($('vitesse').value);
+  const amplitude = Math.min(1, v / 3);          // intensité proportionnelle à la vitesse
+  vibrer(Math.round(15 + 85 * amplitude));       // l'API web ne règle que la durée (15 à 100 ms)
+};
+
+/* ---------- B. Audio spatial (Web Audio : panneur HRTF) ---------- */
+let ctx = null;
+function audio() {
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+function jouerSon(azimutDeg) {
+  const c = audio();
+  const panner = c.createPanner();
+  panner.panningModel = 'HRTF';                  // modèle qui imite la forme de l'oreille
+  panner.distanceModel = 'inverse';
+  const a = azimutDeg * Math.PI / 180, d = 2;    // source à 2 m
+  const x = d * Math.sin(a);                     // x : droite (+) / gauche (-)
+  const z = -d * Math.cos(a);                    // z négatif = devant l'auditeur
+  if (panner.positionX) {
+    panner.positionX.value = x;
+    panner.positionY.value = 0;
+    panner.positionZ.value = z;
+  } else {
+    panner.setPosition(x, 0, z);                 // anciens Safari
+  }
+  const osc = c.createOscillator(), gain = c.createGain();
+  osc.type = 'sawtooth'; osc.frequency.value = 330;
+  gain.gain.setValueAtTime(0.0001, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.25, c.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.6);
+  osc.connect(gain); gain.connect(panner); panner.connect(c.destination);
+  osc.start(); osc.stop(c.currentTime + 0.65);
+}
+$('az').oninput = e => $('azVal').textContent = e.target.value;
+$('bSon').onclick = () => jouerSon(parseFloat($('az').value));
+
+let mystere = null, essais = 0, bons = 0;
+$('bJeu').onclick = () => {
+  mystere = [-60, 0, 60][Math.floor(Math.random() * 3)];
+  jouerSon(mystere);
+};
+document.querySelectorAll('[data-rep]').forEach(b => b.onclick = () => {
+  if (mystere === null) return;
+  const juste = parseInt(b.dataset.rep, 10) === mystere;
+  essais++; if (juste) bons++;
+  $('scoreJeu').textContent = 'Score : ' + bons + ' / ' + essais
+    + (juste ? ' (juste)' : ' (c\'était ' + (mystere < 0 ? 'à gauche' : mystere > 0 ? 'à droite' : 'devant') + ')');
+  mystere = null;
+});
+
+/* ---------- C. Synchronisation ---------- */
+$('decalage').oninput = e => $('dec').textContent = e.target.value;
+$('bSync').onclick = () => {
+  const dec = parseInt($('decalage').value, 10);
+  jouerSon(0);                                   // t = 0 : son
+  $('flash').style.background = '#00c853';       // t = 0 : image
+  setTimeout(() => { $('flash').style.background = '#ddd'; }, 200);
+  setTimeout(() => vibrer([60]), dec);           // t = dec : vibration
+};
+</script>
+</body>
+</html>
