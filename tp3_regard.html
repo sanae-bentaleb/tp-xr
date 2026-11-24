@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Sélection par le regard (Midas touch)</title>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+<style>
+#barre { position: fixed; top: 6px; left: 6px; right: 6px; z-index: 10; display: flex; gap: 6px; flex-wrap: wrap; }
+#barre button { font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 0; background: #455a64; color: #fff; }
+#barre button.actif { background: #1565c0; }
+#etat { position: fixed; bottom: 8px; left: 8px; right: 8px; z-index: 10; color: #fff;
+  font: 600 15px system-ui, sans-serif; text-shadow: 0 0 4px #000; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="barre">
+  <button id="mA">Mode A : regard seul (1 s)</button>
+  <button id="mB" class="actif">Mode B : regard + toucher</button>
+  <button id="test">Test "Midas" 20 s</button>
+</div>
+<div id="etat">Mode B actif.</div>
+<a-scene vr-mode-ui="enabled: false">
+  <a-sky color="#1f2a36"></a-sky>
+  <a-entity id="boutons"></a-entity>
+  <a-entity id="tete" camera position="0 1.6 0" look-controls>
+    <a-entity id="curseur" cursor="fuse: false; fuseTimeout: 1000"
+      raycaster="objects: .bouton; far: 10"
+      position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.02"
+      material="color: #fff; shader: flat"></a-entity>
+  </a-entity>
+</a-scene>
+<script>
+/* ---------- Paramètres (modifiables dans l'adresse : ?deg=1.5) ---------- */
+const params = new URLSearchParams(location.search);
+const degParam = parseFloat(params.get('deg'));
+const TAILLE_DEG = degParam > 0 ? degParam : 3;  // taille angulaire d'un bouton
+const DIST = 2;                                  // distance (m)
+const DWELL_MS = 1000;                           // temps de maintien (mode A)
+
+function tailleDepuisAngle(angleDeg, dist) {
+  return 2 * dist * Math.tan((angleDeg * Math.PI / 180) / 2);
+}
+const T = tailleDepuisAngle(TAILLE_DEG, DIST);
+
+/* ---------- Les 4 boutons placés en arc à 2 m ---------- */
+const DEFS = [
+  { nom: 'Suivant',   az: -24, couleur: '#2e7d32' },
+  { nom: 'Précédent', az: -8,  couleur: '#1565c0' },
+  { nom: 'Aide',      az: 8,   couleur: '#f9a825' },
+  { nom: 'SUPPRIMER', az: 24,  couleur: '#c62828' }
+];
+const conteneur = document.getElementById('boutons');
+DEFS.forEach(d => {
+  const a = d.az * Math.PI / 180;
+  const b = document.createElement('a-plane');
+  b.setAttribute('class', 'bouton');
+  b.setAttribute('data-nom', d.nom);
+  b.setAttribute('width', T);
+  b.setAttribute('height', T);
+  b.setAttribute('position', { x: DIST * Math.sin(a), y: 1.6, z: -DIST * Math.cos(a) });
+  b.setAttribute('rotation', { x: 0, y: -d.az, z: 0 });  // face à l'utilisateur
+  b.setAttribute('material', 'color: ' + d.couleur + '; shader: flat');
+  const t = document.createElement('a-text');
+  t.setAttribute('value', d.nom);
+  t.setAttribute('align', 'center');
+  t.setAttribute('width', Math.max(T * 3, 0.6));
+  t.setAttribute('position', { x: 0, y: -T / 2 - 0.06, z: 0.01 });
+  b.appendChild(t);
+  conteneur.appendChild(b);
+});
+
+/* ---------- Modes A (fuse) et B (regard + toucher) ---------- */
+const curseur = document.getElementById('curseur');
+const etat = document.getElementById('etat');
+let mode = 'B';
+let dernierAppui = 0;
+// appui ET relâchement : le clic de A-Frame part au relâchement
+['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(ev =>
+  window.addEventListener(ev, () => { dernierAppui = performance.now(); }, true));
+
+let debutFuse = null;   // déclaré ici car utilisé par choisirMode
+
+function choisirMode(m) {
+  mode = m;
+  debutFuse = null;
+  curseur.object3D.scale.set(1, 1, 1);
+  curseur.setAttribute('cursor', 'fuse', m === 'A');
+  curseur.setAttribute('cursor', 'fuseTimeout', DWELL_MS);
+  document.getElementById('mA').className = m === 'A' ? 'actif' : '';
+  document.getElementById('mB').className = m === 'B' ? 'actif' : '';
+  etat.textContent = m === 'A'
+    ? 'Mode A : maintenez le regard 1 s sur un bouton.'
+    : 'Mode B : visez, puis touchez l\'écran.';
+}
+document.getElementById('mA').onclick = () => choisirMode('A');
+document.getElementById('mB').onclick = () => choisirMode('B');
+
+/* ---------- Retour visuel progressif (anneau qui se réduit) ---------- */
+curseur.addEventListener('fusing', () => { debutFuse = performance.now(); });
+['mouseleave', 'click'].forEach(ev => curseur.addEventListener(ev, () => {
+  debutFuse = null;
+  curseur.object3D.scale.set(1, 1, 1);
+}));
+setInterval(() => {
+  if (debutFuse) {
+    const k = Math.min(1, (performance.now() - debutFuse) / DWELL_MS);
+    curseur.object3D.scale.set(1 - 0.7 * k, 1 - 0.7 * k, 1);
+  }
+}, 16);
+
+/* ---------- Activation d'un bouton ---------- */
+let activations = 0, journal = [], testActif = false;
+curseur.addEventListener('click', e => {
+  const el = e.detail.intersectedEl;
+  if (!el) return;
+  const estToucher = (performance.now() - dernierAppui) < 150;  // le clic vient d'un tap ?
+  if (mode === 'A' && estToucher) return;    // mode A : seul le regard compte
+  if (mode === 'B' && !estToucher) return;   // mode B : il faut toucher
+  const nom = el.getAttribute('data-nom');
+  activations++;
+  journal.push({ t: Math.round(performance.now()), nom, mode });
+  el.setAttribute('material', 'opacity', 0.3);
+  setTimeout(() => el.setAttribute('material', 'opacity', 1), 250);
+  if (navigator.vibrate) navigator.vibrate(30);
+  etat.textContent = 'Activé : ' + nom + (nom === 'SUPPRIMER' ? ' (action destructrice !)' : '')
+    + ' | total ' + activations;
+});
+
+/* ---------- Test "Midas touch" : balayez du regard SANS vouloir agir ---------- */
+document.getElementById('test').onclick = () => {
+  if (testActif) return;
+  testActif = true; activations = 0; journal = [];
+  let reste = 20;
+  const h = setInterval(() => {
+    reste--;
+    etat.textContent = 'TEST : parcourez les boutons du regard, sans rien vouloir activer... ' + reste + ' s';
+    if (reste <= 0) {
+      clearInterval(h); testActif = false;
+      etat.textContent = 'Mode ' + mode + ' : ' + activations + ' activation(s) involontaire(s) en 20 s.';
+      console.log('MIDAS', JSON.stringify({ mode, deg: TAILLE_DEG, involontaires: activations }));
+    }
+  }, 1000);
+};
+</script>
+</body>
+</html>
