@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Commandes vocales</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 14px; font-size: 18px; }
+button { font-size: 19px; padding: 12px 16px; margin: 4px 4px 4px 0; border-radius: 8px; border: 0; background: #1565c0; color: #fff; }
+button.sec { background: #546e7a; }
+#micro { background: #c62828; }
+#procedure { background: #263238; color: #fff; padding: 12px; border-radius: 10px; }
+#procedure li.actuelle { color: #ffd54f; font-weight: bold; }
+pre { background: #eceff1; padding: 10px; border-radius: 8px; font-size: 15px; white-space: pre-wrap; }
+input[type=text] { font-size: 18px; padding: 8px; width: 70%; }
+</style>
+</head>
+<body>
+<h2>Assistant de maintenance (voix)</h2>
+<div id="procedure">
+  <b>Procédure : remplacer le filtre</b>
+  <ol id="etapes"></ol>
+</div>
+
+<p><button id="micro">Appuyer pour parler</button>
+<span id="indicateur">Micro éteint</span></p>
+<p>Commandes : <i>suivant, précédent, valide, annule, aide, montre-moi la vis du capot</i></p>
+
+<p><b>Repli sans micro</b> (toujours prévoir une alternative) :<br>
+<button class="sec" data-cmd="PRECEDENT">Précédent</button>
+<button class="sec" data-cmd="SUIVANT">Suivant</button>
+<button class="sec" data-cmd="AIDE">Aide</button></p>
+
+<p>Simuler une phrase (test en classe bruyante) :<br>
+<input type="text" id="simu" placeholder="ex : montre-moi la vis du capot">
+<button class="sec" id="bSimu">Envoyer</button></p>
+
+<h3>Ce que le système a compris</h3>
+<pre id="resultat">-</pre>
+<div id="confirmation" style="display:none">
+  <b id="questionConf"></b><br>
+  <button id="oui">Oui</button> <button id="non" class="sec">Non</button>
+</div>
+
+<h3>Journal</h3>
+<pre id="journal"></pre>
+
+<script>
+/* ===================== 1. Compréhension (commandes fermées + intention/entités) ===================== */
+function normaliser(txt) {   // minuscules, sans accents, sans ponctuation
+  return txt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019]/g, "'")          // apostrophes typographiques -> droite
+    .replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const COMMANDES = [   // commande fermée : liste de formulations prévues
+  { intention: 'SUIVANT',   motifs: ['suivant', 'etape suivante', 'prochaine etape', 'continue'] },
+  { intention: 'PRECEDENT', motifs: ['precedent', 'retour', 'reviens', 'etape precedente'] },
+  { intention: 'VALIDER',   motifs: ['valide', 'valider', 'confirme', "c'est fait"] },
+  { intention: 'ANNULER',   motifs: ['annule', 'annuler', 'stop'] },
+  { intention: 'AIDE',      motifs: ['aide', 'au secours', 'je suis bloque'] }
+];
+
+function comprendre(texte) {
+  const t = normaliser(texte);
+  // 1) intention + entités ("montre-moi la vis du capot")
+  const m = t.match(/montre(?: moi)? (?:la |le |les |l')?([a-z]+)(?: (?:du|de la|de l'|des) ?([a-z]+))?/);
+  if (m) return { intention: 'AFFICHER_PIECE', entites: { piece: m[1], emplacement: m[2] || null } };
+  // 2) commandes fermées
+  for (const c of COMMANDES) {
+    if (c.motifs.some(p => (' ' + t + ' ').includes(' ' + p + ' '))) return { intention: c.intention, entites: {} };
+  }
+  return { intention: 'INCONNU', entites: {} };
+}
+
+/* ===================== 2. Procédure (règle métier) ===================== */
+const ETAPES = ['Couper l\'alimentation', 'Ouvrir le capot', 'Retirer l\'ancien filtre',
+  'Installer le filtre neuf', 'Refermer et remettre sous tension'];
+let etapeCourante = 0;
+const olEtapes = document.getElementById('etapes');
+
+function afficherEtapes() {
+  olEtapes.innerHTML = ETAPES.map((e, i) => '<li class="' + (i === etapeCourante ? 'actuelle' : '') + '">' + e + '</li>').join('');
+}
+afficherEtapes();
+
+function executer(intention, entites) {
+  switch (intention) {
+    case 'SUIVANT':   etapeCourante = Math.min(ETAPES.length - 1, etapeCourante + 1); break;
+    case 'PRECEDENT': etapeCourante = Math.max(0, etapeCourante - 1); break;
+    case 'VALIDER':   log('Étape ' + (etapeCourante + 1) + ' validée.'); etapeCourante = Math.min(ETAPES.length - 1, etapeCourante + 1); break;
+    case 'ANNULER':   log('Dernière action annulée.'); etapeCourante = Math.max(0, etapeCourante - 1); break;
+    case 'AIDE':      log('AIDE : "' + ETAPES[etapeCourante] + '" - voir schéma 3.'); break;
+    case 'AFFICHER_PIECE': log('Affichage de : ' + entites.piece + (entites.emplacement ? ' (' + entites.emplacement + ')' : '')); break;
+  }
+  afficherEtapes();
+}
+
+/* ===================== 3. Garde-fous : confiance et confirmation ===================== */
+const SEUIL_CONFIANCE = 0.7;
+let enAttente = null;
+const $ = id => document.getElementById(id);
+
+function traiter(texte, confiance) {
+  const r = comprendre(texte);
+  r.texte = texte; r.confiance = confiance;
+  $('resultat').textContent = JSON.stringify(r, null, 2);   // toujours montrer ce qui a été compris
+  if (r.intention === 'INCONNU') { log('Non compris : "' + texte + '". Répétez ou utilisez les boutons.'); return; }
+  if (confiance < SEUIL_CONFIANCE) {   // incertain : on demande confirmation
+    enAttente = r;
+    $('questionConf').textContent = 'J\'ai compris "' + texte + '" (confiance ' + confiance.toFixed(2) + '). Confirmer ?';
+    $('confirmation').style.display = 'block';
+  } else executer(r.intention, r.entites);
+}
+
+$('oui').onclick = () => { if (enAttente) executer(enAttente.intention, enAttente.entites); enAttente = null; $('confirmation').style.display = 'none'; };
+$('non').onclick = () => { enAttente = null; $('confirmation').style.display = 'none'; log('Commande refusée.'); };
+
+function log(m) { $('journal').textContent = new Date().toLocaleTimeString() + ' - ' + m + '\n' + $('journal').textContent; }
+
+/* ===================== 4. Reconnaissance vocale du navigateur ===================== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let reco = null, ecoute = false;
+
+if (!SR) {
+  $('micro').disabled = true;
+  $('indicateur').textContent = 'Reconnaissance vocale NON disponible sur ce navigateur : utilisez les boutons.';
+} else {
+  reco = new SR();
+  reco.lang = 'fr-FR';
+  reco.continuous = false;       // une phrase par appui (push-to-talk)
+  reco.interimResults = false;
+  reco.maxAlternatives = 3;      // n-best : meilleures hypothèses
+  reco.onstart = () => { ecoute = true; $('indicateur').textContent = 'JE VOUS ÉCOUTE...'; $('micro').textContent = 'Écoute en cours'; };
+  reco.onend = () => { ecoute = false; $('indicateur').textContent = 'Micro éteint'; $('micro').textContent = 'Appuyer pour parler'; };
+  reco.onresult = e => {
+    const alt = e.results[0][0];
+    const autres = Array.from(e.results[0]).map(a => a.transcript).join(' | ');
+    log('Hypothèses : ' + autres);
+    traiter(alt.transcript, alt.confidence || 0.5);
+  };
+  reco.onerror = e => {   // jamais d'échec silencieux
+    const msgs = { 'no-speech': 'Rien entendu.', 'not-allowed': 'Micro refusé.', 'audio-capture': 'Pas de micro.', 'network': 'Réseau indisponible (la reconnaissance utilise un service en ligne).' };
+    log('Erreur vocale : ' + (msgs[e.error] || e.error));
+  };
+  $('micro').onclick = () => { if (ecoute) reco.stop(); else { try { reco.start(); } catch (x) {} } };
+}
+
+/* Boutons de repli + simulation */
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => executer(b.dataset.cmd, {}));
+$('bSimu').onclick = () => { const v = $('simu').value; if (v) traiter(v, 0.9); };
+</script>
+</body>
+</html>
