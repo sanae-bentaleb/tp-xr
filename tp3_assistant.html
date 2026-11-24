@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Atelier : assistant de maintenance</title>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+<style>
+#hud { position: fixed; top: 6px; left: 6px; right: 6px; z-index: 10; color: #fff; pointer-events: none;
+  font: 600 16px system-ui, sans-serif; text-shadow: 0 0 4px #000, 0 0 4px #000; }
+#repli { position: fixed; bottom: 8px; left: 0; right: 0; z-index: 10; display: flex; gap: 8px; justify-content: center; }
+#repli button { font-size: 18px; padding: 12px 18px; border-radius: 10px; border: 0; background: #455a64; color: #fff; }
+#fin { position: fixed; inset: 0; z-index: 20; background: #fffffff2; padding: 16px; display: none; font: 17px system-ui, sans-serif; }
+#fin pre { background: #eee; padding: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="hud">...</div>
+<div id="repli">
+  <button id="bValider">Valider</button>
+  <button id="bAide">Aide</button>
+  <button id="bVoix">Voix</button>
+</div>
+<div id="fin"></div>
+
+<a-scene vr-mode-ui="enabled: false">
+  <a-sky color="#22303c"></a-sky>
+  <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+  <a-entity light="type: directional; intensity: 0.6" position="1 3 2"></a-entity>
+
+  <!-- La "machine" : 3 pièces à sélectionner -->
+  <a-entity id="machine" position="0 1.4 -2">
+    <a-box id="capot" class="piece" data-nom="capot" position="-0.4 0 0" width="0.35" height="0.35" depth="0.2" color="#90a4ae"></a-box>
+    <a-sphere id="vis" class="piece" data-nom="vis" position="0 0 0" radius="0.15" color="#e57373"></a-sphere>
+    <a-cylinder id="filtre" class="piece" data-nom="filtre" position="0.4 0 0" radius="0.17" height="0.3" color="#64b5f6"></a-cylinder>
+    <a-text value="Capot" position="-0.4 -0.3 0.1" align="center" width="1.2"></a-text>
+    <a-text value="Vis" position="0 -0.3 0.1" align="center" width="1.2"></a-text>
+    <a-text value="Filtre" position="0.4 -0.3 0.1" align="center" width="1.2"></a-text>
+  </a-entity>
+
+  <a-entity id="tete" camera position="0 1.6 0" look-controls>
+    <a-entity id="curseur" cursor="fuse: false" raycaster="objects: .piece; far: 10"
+      position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.02"
+      material="color: #fff; shader: flat"></a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+/* ========== CONFIGURATION : c'est ICI que vous testez vos choix de conception ========== */
+const params = new URLSearchParams(location.search);
+const dwellParam = parseInt(params.get('dwell'), 10);
+const CONFIG = {
+  modeSelection: params.get('mode') || 'tap',               // 'tap' (regard + toucher) ou 'fuse' (regard seul)
+  dwellMs: dwellParam > 0 ? dwellParam : 1000,              // durée du maintien en mode 'fuse'
+  confirmerValidation: params.get('confirmer') !== '0',     // demander confirmation avant "Valider" ?
+  voix: params.get('voix') !== '0'                          // bouton Voix actif ?
+};
+
+/* ========== Procédure : quelle pièce à quelle étape ========== */
+const ETAPES = [
+  { texte: 'Étape 1/3 : sélectionnez le CAPOT', attendu: 'capot' },
+  { texte: 'Étape 2/3 : sélectionnez la VIS', attendu: 'vis' },
+  { texte: 'Étape 3/3 : sélectionnez le FILTRE', attendu: 'filtre' }
+];
+const mesure = { debut: null, erreurs: 0, aides: 0, selections: 0 };
+let etape = 0, selection = null, enAttenteConfirmation = false;
+
+const $ = id => document.getElementById(id);
+const hud = $('hud');
+const curseur = $('curseur');
+
+function bip(f = 600, d = 0.1) {
+  try {
+    window.__ctx = window.__ctx || new (window.AudioContext || window.webkitAudioContext)();
+    const c = window.__ctx, o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = f; g.gain.value = 0.12;
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + d);
+  } catch (e) {}
+}
+function vibrer(m) { if (navigator.vibrate) navigator.vibrate(m); }
+function msg(t) { hud.textContent = ETAPES[etape] ? ETAPES[etape].texte + ' | ' + t : t; }
+
+/* ---------- Sélection d'une pièce ---------- */
+curseur.setAttribute('cursor', { fuse: CONFIG.modeSelection === 'fuse', fuseTimeout: CONFIG.dwellMs });
+
+let dernierAppui = 0;
+// appui ET relâchement : le clic de A-Frame part au relâchement
+['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(ev =>
+  window.addEventListener(ev, () => { dernierAppui = performance.now(); }, true));
+
+function surbrillance(el, on) {
+  el.setAttribute('material', 'emissive', on ? '#ffee58' : '#000000');
+  el.setAttribute('material', 'emissiveIntensity', on ? 0.7 : 0);
+}
+
+curseur.addEventListener('click', e => {
+  const el = e.detail.intersectedEl;
+  if (!el || !el.classList.contains('piece')) return;
+  const tap = (performance.now() - dernierAppui) < 150;
+  if (CONFIG.modeSelection === 'fuse' && tap) return;
+  if (CONFIG.modeSelection === 'tap' && !tap) return;
+  if (!mesure.debut) mesure.debut = performance.now();
+  document.querySelectorAll('.piece').forEach(p => surbrillance(p, false));
+  enAttenteConfirmation = false;
+  selection = el.getAttribute('data-nom'); mesure.selections++;
+  surbrillance(el, true); bip(600); vibrer(20);
+  msg('sélection : ' + selection);
+});
+
+/* ---------- Action "Valider" ---------- */
+function valider() {
+  if (!ETAPES[etape]) return;
+  if (!selection) { msg('rien de sélectionné'); bip(200, 0.2); return; }
+  if (CONFIG.confirmerValidation && !enAttenteConfirmation) {
+    enAttenteConfirmation = true; msg('Confirmer "' + selection + '" ? Revalidez pour confirmer.'); bip(450);
+    return;
+  }
+  enAttenteConfirmation = false;
+  if (selection === ETAPES[etape].attendu) {
+    etape++; selection = null; bip(880, 0.2); vibrer([40, 60, 40]);
+    document.querySelectorAll('.piece').forEach(p => surbrillance(p, false));
+    if (etape >= ETAPES.length) return terminer();
+    msg('Bien joué !');
+  } else {
+    mesure.erreurs++; bip(180, 0.3); vibrer([100, 50, 100]);
+    selection = null; document.querySelectorAll('.piece').forEach(p => surbrillance(p, false));
+    msg('Mauvaise pièce - réessayez.');
+  }
+}
+
+/* ---------- Action "Aide" ---------- */
+function aide() {
+  if (!ETAPES[etape]) return;
+  mesure.aides++;
+  const nom = ETAPES[etape].attendu;
+  const el = document.querySelector('.piece[data-nom="' + nom + '"]');
+  surbrillance(el, true);
+  setTimeout(() => { if (selection !== nom) surbrillance(el, false); }, 2000);   // garde la sélection visible
+  msg('Aide : la pièce attendue clignote.');
+}
+
+/* ---------- Voix (si disponible) ---------- */
+function commande(txt) {
+  const t = txt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/valid|confirm/.test(t)) valider();
+  else if (/aide|secours/.test(t)) aide();
+  else if (/annul/.test(t)) { selection = null; enAttenteConfirmation = false; msg('Annulé.'); }
+  else msg('Commande non comprise : "' + txt + '"');
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR || !CONFIG.voix) { $('bVoix').style.display = 'none'; }
+else {
+  const r = new SR(); r.lang = 'fr-FR'; r.continuous = false; r.interimResults = false;
+  r.onresult = e => commande(e.results[0][0].transcript);
+  r.onerror = e => msg('Erreur vocale : ' + e.error);
+  $('bVoix').onclick = () => { try { r.start(); msg('Je vous écoute...'); } catch (x) {} };
+}
+$('bValider').onclick = valider;
+$('bAide').onclick = aide;
+
+/* ---------- Fin et résultats ---------- */
+function terminer() {
+  const s = ((performance.now() - mesure.debut) / 1000).toFixed(1);
+  const ligne = [CONFIG.modeSelection, CONFIG.dwellMs, CONFIG.confirmerValidation ? 1 : 0, s, mesure.erreurs, mesure.aides].join(';');
+  $('fin').innerHTML = '<h2>Terminé !</h2>'
+    + '<p>Temps : <b>' + s + ' s</b> - Erreurs : <b>' + mesure.erreurs + '</b> - Aides : <b>' + mesure.aides + '</b></p>'
+    + '<p>Ligne à recopier dans votre tableau :</p>'
+    + '<pre>mode;dwell;confirmer;secondes;erreurs;aides\n' + ligne + '</pre>'
+    + '<button onclick="location.reload()">Nouvel essai</button>';
+  $('fin').style.display = 'block';
+  console.log('RESULTAT', ligne);
+}
+
+msg('Visez une pièce.');
+</script>
+</body>
+</html>
