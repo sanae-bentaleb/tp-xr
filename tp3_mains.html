@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Suivi des mains et pincement</title>
+<style>
+body { margin: 0; font-family: system-ui, sans-serif; background: #111; color: #fff; }
+#zone { position: relative; width: 100vw; max-width: 640px; min-height: 200px; margin: 0 auto; background: #000; }
+video, canvas { width: 100%; display: block; transform: scaleX(-1); } /* effet miroir */
+canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+#panneau { padding: 10px 14px; font-size: 17px; }
+#etatPince { font-size: 34px; font-weight: bold; }
+label { display: block; margin: 6px 0; }
+button { font-size: 18px; padding: 10px 16px; border-radius: 8px; border: 0; background: #1565c0; color: #fff; }
+button:disabled { opacity: 0.5; }
+</style>
+</head>
+<body>
+<div id="zone"><video id="video" playsinline muted autoplay></video><canvas id="dessin"></canvas></div>
+<div id="panneau">
+  <button id="start">Démarrer la caméra</button>
+  <div id="statut">En attente.</div>
+  <div id="etatPince">-</div>
+  <div>Ratio pouce-index / paume : <b id="ratio">-</b> | Confiance main : <b id="conf">-</b></div>
+  <div>Pincements détectés : <b id="nbPinces">0</b> | Parasites (aller-retour &lt; 300 ms) : <b id="nbParasites">0</b></div>
+  <label><input type="checkbox" id="hyst" checked> Hystérésis (deux seuils)</label>
+  <label>Seuil d'entrée (pince) : <b id="vOn">0.25</b>
+    <input type="range" id="sOn" min="0.10" max="0.60" step="0.01" value="0.25" style="width:100%"></label>
+  <label>Seuil de sortie (ouvre) : <b id="vOff">0.45</b>
+    <input type="range" id="sOff" min="0.10" max="0.80" step="0.01" value="0.45" style="width:100%"></label>
+</div>
+
+<!-- ============ Logique pure (testable sans caméra) ============ -->
+<script>
+/* Distance entre deux points-clés, en pixels (x et y sont normalisés entre 0 et 1) */
+function dist(a, b, w, h) { return Math.hypot((a.x - b.x) * w, (a.y - b.y) * h); }
+
+/* Ratio de pincement = distance(pouce, index) / taille de la paume.
+   Pouce = point 4, index = point 8, poignet = point 0, base du majeur = point 9.
+   Diviser par la paume rend la mesure indépendante de la distance à la caméra. */
+function ratioPincement(L, w, h) {
+  const paume = dist(L[0], L[9], w, h);
+  return paume > 0 ? dist(L[4], L[8], w, h) / paume : 1;
+}
+
+/* Machine à états du pincement, avec hystérésis et temps de maintien.
+   etat = { pince: false, debut: null }   cfg = { on, off, hyst, maintienMs } */
+function majPincement(etat, ratio, t, cfg) {
+  // sans hystérésis : même seuil ; avec : le seuil de sortie ne peut pas être sous celui d'entrée
+  const seuilOff = cfg.hyst ? Math.max(cfg.off, cfg.on) : cfg.on;
+  if (!etat.pince) {
+    if (ratio < cfg.on) {
+      if (etat.debut === null) etat.debut = t;   // le pincement commence
+      if (t - etat.debut >= cfg.maintienMs) { etat.pince = true; etat.debut = null; return 'debut'; }
+    } else etat.debut = null;
+  } else if (ratio > seuilOff) { etat.pince = false; return 'fin'; }
+  return null;
+}
+</script>
+
+<!-- ============ Suivi des mains avec MediaPipe ============ -->
+<script type="module">
+import { HandLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const $ = id => document.getElementById(id);
+const video = $('video'), canvas = $('dessin'), ctx = canvas.getContext('2d');
+let landmarker = null;
+const etat = { pince: false, debut: null };
+let nbPinces = 0, nbParasites = 0, tDebutPince = 0;
+
+$('sOn').oninput = e => $('vOn').textContent = e.target.value;
+$('sOff').oninput = e => $('vOff').textContent = e.target.value;
+
+async function creerLandmarker() {
+  const fileset = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const base = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+  try { // essai sur le GPU, sinon repli sur le processeur
+    return await HandLandmarker.createFromOptions(fileset,
+      { baseOptions: { modelAssetPath: base, delegate: "GPU" }, runningMode: "VIDEO", numHands: 1 });
+  } catch (e) {
+    return await HandLandmarker.createFromOptions(fileset,
+      { baseOptions: { modelAssetPath: base, delegate: "CPU" }, runningMode: "VIDEO", numHands: 1 });
+  }
+}
+
+$('start').onclick = async () => {
+  $('start').disabled = true;   // évite de lancer deux caméras / deux boucles
+  try {
+    $('statut').textContent = 'Chargement du modèle (quelques secondes)...';
+    landmarker = await creerLandmarker();
+    const flux = await navigator.mediaDevices.getUserMedia(
+      { video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
+    video.srcObject = flux;
+    await video.play();
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    $('statut').textContent = 'Montrez votre main à la caméra avant.';
+    boucle();
+  } catch (e) {
+    $('statut').textContent = 'Erreur : ' + e.message + ' (caméra refusée ? réseau bloqué ?)';
+    $('start').disabled = false;
+  }
+};
+
+let dernierT = -1;
+function boucle() {
+  if (video.currentTime !== dernierT) {
+    dernierT = video.currentTime;
+    const t = performance.now();
+    const res = landmarker.detectForVideo(video, t);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const L = res.landmarks && res.landmarks[0];
+    if (L) {
+      const w = canvas.width, h = canvas.height;
+      // dessin du squelette (21 points)
+      ctx.fillStyle = '#00e676';
+      L.forEach(p => { ctx.beginPath(); ctx.arc(p.x * w, p.y * h, 4, 0, 6.28); ctx.fill(); });
+      ctx.fillStyle = '#ff5252';   // pouce (4) et index (8)
+      [4, 8].forEach(i => { ctx.beginPath(); ctx.arc(L[i].x * w, L[i].y * h, 8, 0, 6.28); ctx.fill(); });
+
+      const r = ratioPincement(L, w, h);
+      const hd = res.handedness || res.handednesses;
+      $('ratio').textContent = r.toFixed(2);
+      $('conf').textContent = hd && hd[0] ? hd[0][0].score.toFixed(2) : '-';
+
+      const cfg = { on: +$('sOn').value, off: +$('sOff').value, hyst: $('hyst').checked, maintienMs: 100 };
+      const ev = majPincement(etat, r, t, cfg);
+      if (ev === 'debut') { tDebutPince = t; nbPinces++; if (navigator.vibrate) navigator.vibrate(20); }
+      if (ev === 'fin' && t - tDebutPince < 300) nbParasites++;
+
+      $('etatPince').textContent = etat.pince ? 'PINCE (select)' : 'ouvert';
+      $('etatPince').style.color = etat.pince ? '#00e676' : '#fff';
+      $('nbPinces').textContent = nbPinces; $('nbParasites').textContent = nbParasites;
+    } else {
+      $('etatPince').textContent = 'main perdue';   // toujours prévoir la perte de suivi
+      etat.pince = false; etat.debut = null;
+    }
+  }
+  requestAnimationFrame(boucle);
+}
+</script>
+</body>
+</html>
