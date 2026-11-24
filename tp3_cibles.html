@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TP3 - Test de pointage (tailles angulaires)</title>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+<style>
+#info { position: fixed; top: 6px; left: 6px; right: 6px; z-index: 10; color: #fff;
+  font: 600 15px system-ui, sans-serif; text-shadow: 0 0 4px #000; pointer-events: none; }
+#demarrer { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10;
+  font-size: 20px; padding: 14px 22px; border-radius: 10px; border: 0; background: #1565c0;
+  color: #fff; }
+#resultats { position: fixed; inset: 0; z-index: 20; background: #fffffff2; padding: 14px; display: none;
+  font: 16px system-ui, sans-serif; overflow: auto; }
+#resultats pre { background: #eee; padding: 8px; font-size: 14px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="info">Appuyez sur Démarrer, puis visez la sphère avec le point blanc et touchez l'écran.</div>
+<button id="demarrer">Démarrer</button>
+<div id="resultats"></div>
+<a-scene vr-mode-ui="enabled: false">
+  <a-sky color="#26323f"></a-sky>
+  <a-entity id="tete" camera position="0 1.6 0" look-controls>
+    <a-entity id="curseur" cursor="fuse: false" raycaster="objects: .cible; far: 10"
+      position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.02"
+      material="color: #fff; shader: flat"></a-entity>
+  </a-entity>
+</a-scene>
+<script>
+/* ---------- Paramètres de l'expérience ---------- */
+const DIST = 2;                // distance des cibles (m)
+const ANGLES = [1.5, 3, 6];    // taille angulaire des cibles (degrés)
+const ESSAIS = 5;              // essais par taille
+
+/* Taille réelle (diamètre en m) d'une cible vue sous un angle donné */
+function tailleDepuisAngle(angleDeg, dist) {
+  return 2 * dist * Math.tan((angleDeg * Math.PI / 180) / 2);
+}
+
+/* ---------- Fonctions utilitaires ---------- */
+let ctxAudio = null;
+function bip(f = 700, d = 0.08) {
+  try {
+    ctxAudio = ctxAudio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctxAudio.createOscillator(), g = ctxAudio.createGain();
+    o.frequency.value = f; g.gain.value = 0.12;
+    o.connect(g); g.connect(ctxAudio.destination);
+    o.start(); o.stop(ctxAudio.currentTime + d);
+  } catch (e) {}
+}
+function melanger(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ---------- Déroulement ---------- */
+const scene = document.querySelector('a-scene');
+const curseur = document.getElementById('curseur');
+const info = document.getElementById('info');
+let essais = [], i = 0, cible = null, t0 = 0, erreursEssai = 0, enCours = false;
+const resultats = []; // {angle, temps_ms, erreurs}
+
+function nouvelleCible() {
+  if (cible) cible.remove();
+  const angle = essais[i];
+  const taille = tailleDepuisAngle(angle, DIST);
+  const az = (Math.random() * 140 - 70) * Math.PI / 180;  // -70° à +70°
+  const el = (Math.random() * 50 - 15) * Math.PI / 180;   // -15° à +35°
+  const x = DIST * Math.sin(az) * Math.cos(el);
+  const y = 1.6 + DIST * Math.sin(el);
+  const z = -DIST * Math.cos(az) * Math.cos(el);
+  cible = document.createElement('a-sphere');
+  cible.setAttribute('class', 'cible');
+  cible.setAttribute('id', 'cible');
+  cible.setAttribute('radius', taille / 2);
+  cible.setAttribute('position', { x, y, z });
+  cible.setAttribute('material', 'color: #ffca28; shader: flat');
+  scene.appendChild(cible);
+  info.textContent = 'Essai ' + (i + 1) + ' / ' + essais.length + ' (cible de ' + angle + '°)';
+  t0 = performance.now(); erreursEssai = 0;
+}
+
+function terminer() {
+  enCours = false; if (cible) cible.remove();
+  let txt = 'RÉSULTATS (distance ' + DIST + ' m)\n\nangle(°) | temps moyen (ms) | erreurs\n';
+  let csv = 'angle_deg;temps_moyen_ms;erreurs\n';
+  ANGLES.forEach(a => {
+    const r = resultats.filter(x => x.angle === a);
+    const t = r.reduce((s, x) => s + x.temps_ms, 0) / r.length;
+    const e = r.reduce((s, x) => s + x.erreurs, 0);
+    txt += String(a).padEnd(8) + ' | ' + t.toFixed(0).padEnd(16) + ' | ' + e + '\n';
+    csv += a + ';' + t.toFixed(0) + ';' + e + '\n';
+  });
+  const div = document.getElementById('resultats');
+  div.innerHTML = '<h2>Terminé !</h2><pre>' + txt + '</pre>'
+    + '<p>Recopiez ce tableau dans votre compte rendu.</p>'
+    + '<pre>' + csv + '</pre>'
+    + '<button onclick="location.reload()">Recommencer</button>';
+  div.style.display = 'block';
+  window.resultatsCSV = csv;
+}
+
+curseur.addEventListener('click', e => {
+  if (!enCours || !cible) return;   // ignore les taps pendant la pause entre deux cibles
+  const touche = e.detail.intersectedEl && e.detail.intersectedEl.id === 'cible';
+  if (touche) {
+    resultats.push({ angle: essais[i], temps_ms: performance.now() - t0, erreurs: erreursEssai });
+    bip(880); if (navigator.vibrate) navigator.vibrate(25);
+    cible.remove(); cible = null;   // la cible disparaît tout de suite
+    i++;
+    if (i >= essais.length) terminer(); else setTimeout(nouvelleCible, 500);
+  } else {
+    erreursEssai++; bip(200, 0.15); // tap à côté = erreur
+  }
+});
+
+document.getElementById('demarrer').onclick = e => {
+  e.target.style.display = 'none';
+  essais = melanger(ANGLES.flatMap(a => Array(ESSAIS).fill(a)));
+  i = 0; enCours = true; nouvelleCible();
+};
+</script>
+</body>
+</html>
